@@ -22,13 +22,14 @@ from allauth.account.models import (
     EmailConfirmation,
     EmailConfirmationHMAC,
 )
-from allauth.tests import TestCase, patch
+from allauth.tests import Mock, TestCase, patch
 from allauth.utils import get_user_model, get_username_max_length
 
 from . import app_settings
 from ..compat import is_authenticated, reverse
 from .adapter import get_adapter
 from .auth_backends import AuthenticationBackend
+from .signals import user_logged_out
 from .utils import (
     filter_users_by_username,
     url_str_to_user_pk,
@@ -208,6 +209,19 @@ class AccountTests(TestCase):
             reverse('account_change_password'),
             fetch_redirect_response=False)
 
+    def test_set_password_not_allowed(self):
+        user = self._create_user_and_login(True)
+        pwd = '!*123i1uwn12W23'
+        self.assertFalse(user.check_password(pwd))
+        resp = self.client.post(
+            reverse('account_set_password'),
+            data={'password1': pwd,
+                  'password2': pwd})
+        user.refresh_from_db()
+        self.assertFalse(user.check_password(pwd))
+        self.assertTrue(user.has_usable_password())
+        self.assertEqual(resp.status_code, 302)
+
     def test_password_change_no_redirect(self):
         resp = self._password_set_or_change_redirect(
             'account_change_password',
@@ -284,6 +298,10 @@ class AccountTests(TestCase):
         # Extract URL for `password_reset_from_key` view and access it
         url = body[body.find('/password/reset/'):].split()[0]
         resp = self.client.get(url)
+        # Follow the redirect the actual password reset page with the key
+        # hidden.
+        url = resp.url
+        resp = self.client.get(url)
         self.assertTemplateUsed(
             resp,
             'account/password_reset_from_key.%s' %
@@ -336,8 +354,11 @@ class AccountTests(TestCase):
         user = self._request_new_password()
         body = mail.outbox[0].body
         url = body[body.find('/password/reset/'):].split()[0]
+        resp = self.client.get(url)
+        # Follow the redirect the actual password reset page with the key
+        # hidden.
         resp = self.client.post(
-            url,
+            resp.url,
             {'password1': 'newpass123',
              'password2': 'newpass123'})
         self.assertTrue(is_authenticated(user))
@@ -562,8 +583,21 @@ class AccountTests(TestCase):
         self.assertTemplateUsed(
             resp,
             'account/logout.%s' % app_settings.TEMPLATE_EXTENSION)
+
+        receiver_mock = Mock()
+        user_logged_out.connect(receiver_mock)
+
         resp = c.post(reverse('account_logout'))
+
         self.assertTemplateUsed(resp, 'account/messages/logged_out.txt')
+        receiver_mock.assert_called_once_with(
+            sender=get_user_model(),
+            request=resp.wsgi_request,
+            user=get_user_model().objects.get(username='john'),
+            signal=user_logged_out,
+        )
+
+        user_logged_out.disconnect(receiver_mock)
 
     def _logout_view(self, method):
         c = Client()

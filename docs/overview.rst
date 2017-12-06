@@ -45,6 +45,8 @@ Supported Providers
 
 - Auth0 (OAuth2)
 
+- Authentiq (OAuth2)
+
 - Basecamp (OAuth2)
 
 - Baidu (OAuth2)
@@ -56,6 +58,8 @@ Supported Providers
 - Bitly (OAuth2)
 
 - Box (OAuth2)
+
+- Dataporten (OAuth2)
 
 - Daum (OAuth2)
 
@@ -102,6 +106,8 @@ Supported Providers
 - Mail.Ru (OAuth2)
 
 - MailChimp (OAuth2)
+
+- Meetup (OAuth2)
 
 - Naver (OAuth2)
 
